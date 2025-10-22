@@ -23,28 +23,29 @@ public class UserController {
         String username = userData.getString("nome");
         String password = userData.getString("senha");
 
-        // Validação (conforme requisitos )
+        // Validação (conforme requisitos)
         String validationError = ValidationService.validateCredentials(username, password);
         if (validationError != null) {
-            return createErrorResponse(422, validationError); // 422 Unprocessable Entity
+            return createErrorResponse(422); // 422 Unprocessable Entity
         }
 
         try {
-            // Verifica se o usuário já existe [cite: 40]
+            // Verifica se o usuário já existe
             if (db.findUserByUsername(username) != null) {
-                return createErrorResponse(409, "Conflito: Nome de usuário já existe."); // 409 Conflict
+                return createErrorResponse(409); // 409 Conflict
             }
 
             // Cria o hash da senha
             String passwordHash = PasswordService.hashPassword(password);
 
-            // Salva no DB (role "user" por padrão [cite: 75])
+            // Salva no DB (role "user" por padrão)
             db.createUser(username, passwordHash, "user");
 
-            return new JSONObject().put("status", 201); // 201 Created
+            // ALTERAÇÃO: Envia o status como String
+            return new JSONObject().put("status", "201"); // 201 Created
 
         } catch (SQLException e) {
-            return createErrorResponse(500, "Erro de banco de dados ao criar usuário.");
+            return createErrorResponse(500);
         }
     }
 
@@ -61,18 +62,19 @@ public class UserController {
 
             // Valida usuário e senha
             if (user == null || !PasswordService.checkPassword(password, user.getPasswordHash())) {
-                return createErrorResponse(401, "Não autorizado: Credenciais inválidas."); // 401 Unauthorized
+                return createErrorResponse(401); // 401 Unauthorized
             }
 
-            // Gera o token JWT [cite: 33]
+            // Gera o token JWT
             String token = jwt.generateToken(user.getId(), user.getUsername(), user.getRole());
 
+            // ALTERAÇÃO: Envia o status como String
             return new JSONObject()
-                    .put("status", 200)
+                    .put("status", "200")
                     .put("token", token); // Conforme protocolo "Login"
 
         } catch (SQLException e) {
-            return createErrorResponse(500, "Erro de banco de dados ao tentar logar.");
+            return createErrorResponse(500);
         }
     }
 
@@ -86,12 +88,13 @@ public class UserController {
             String username = claims.getSubject();
 
             // O cliente espera uma string "usuario" (conforme DashboardPanel.java)
+            // ALTERAÇÃO: Envia o status como String
             return new JSONObject()
-                    .put("status", 200)
+                    .put("status", "200")
                     .put("usuario", username); // Conforme protocolo "Listar Usuário"
 
         } catch (JwtException e) {
-            return createErrorResponse(401, "Token inválido ou expirado.");
+            return createErrorResponse(401);
         }
     }
 
@@ -106,21 +109,22 @@ public class UserController {
 
             String newPassword = request.getJSONObject("usuario").getString("senha");
 
-            // Validação (conforme requisitos [cite: 76, 78])
+            // Validação (conforme requisitos)
             String validationError = ValidationService.validateCredentials("valido", newPassword); // (username n/a)
             if (validationError != null) {
-                return createErrorResponse(422, validationError);
+                return createErrorResponse(422);
             }
 
             String newPasswordHash = PasswordService.hashPassword(newPassword);
             db.updateUserPassword(userId, newPasswordHash);
 
-            return new JSONObject().put("status", 200);
+            // ALTERAÇÃO: Envia o status como String
+            return new JSONObject().put("status", "200");
 
         } catch (JwtException e) {
-            return createErrorResponse(401, "Token inválido ou expirado.");
+            return createErrorResponse(401);
         } catch (SQLException e) {
-            return createErrorResponse(500, "Erro de banco de dados ao atualizar senha.");
+            return createErrorResponse(500);
         }
     }
 
@@ -133,16 +137,17 @@ public class UserController {
             Claims claims = jwt.validateAndGetClaims(token);
             int userId = claims.get("id", Integer.class);
 
-            // TODO: Antes de apagar o usuário, apagar as REVIEWS dele [cite: 11]
+            // TODO: Antes de apagar o usuário, apagar as REVIEWS dele
 
             db.deleteUser(userId);
 
-            return new JSONObject().put("status", 200);
+            // ALTERAÇÃO: Envia o status como String
+            return new JSONObject().put("status", "200");
 
         } catch (JwtException e) {
-            return createErrorResponse(401, "Token inválido ou expirado.");
+            return createErrorResponse(401);
         } catch (SQLException e) {
-            return createErrorResponse(500, "Erro de banco de dados ao excluir conta.");
+            return createErrorResponse(500);
         }
     }
 
@@ -155,16 +160,18 @@ public class UserController {
             // Apenas validamos o token. O JWT é "stateless",
             // o cliente que deve destruir o token.
             jwt.validateAndGetClaims(token);
-            return new JSONObject().put("status", 200);
+            // ALTERAÇÃO: Envia o status como String
+            return new JSONObject().put("status", "200");
         } catch (JwtException e) {
             // Mesmo se o token for inválido, o logout "funciona"
-            return new JSONObject().put("status", 200);
+            // ALTERAÇÃO: Envia o status como String
+            return new JSONObject().put("status", "200");
         }
     }
 
-    private JSONObject createErrorResponse(int status, String message) {
+    // ALTERAÇÃO: Converte o status para String
+    private JSONObject createErrorResponse(int status) {
         return new JSONObject()
-                .put("status", status)
-                .put("mensagem", message);
+                .put("status", String.valueOf(status));
     }
 }

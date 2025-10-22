@@ -16,9 +16,9 @@ public class RequestRouter {
     public JSONObject handleRequest(String jsonRequestString) {
         try {
             JSONObject request = new JSONObject(jsonRequestString);
-            String operacao = request.getString("operacao"); // [cite: 87]
+            String operacao = request.getString("operacao"); //
 
-            // O token é necessário para todas as operações, exceto LOGIN e CRIAR_USUARIO
+            // O token é necessário para todas as operations, exceto LOGIN e CRIAR_USUARIO
             String token = request.optString("token", null);
 
             switch (operacao) {
@@ -41,20 +41,20 @@ public class RequestRouter {
                 // TODO: Adicionar casos para CRUD de Filmes e Reviews (ADMIN e USER)
 
                 default:
-                    return createErrorResponse(400, "Operação desconhecida: " + operacao);
+                    return createErrorResponse(400);
             }
 
         } catch (JSONException e) {
-            return createErrorResponse(400, "Requisição JSON mal formatada: " + e.getMessage());
+            return createErrorResponse(400);
         } catch (Exception e) {
             e.printStackTrace();
-            return createErrorResponse(500, "Erro interno inesperado no servidor: " + e.getMessage());
+            return createErrorResponse(500);
         }
     }
 
-    private JSONObject createErrorResponse(int status, String message) {
+    // ALTERAÇÃO: Converte o status para String
+    private JSONObject createErrorResponse(int status) {
         return new JSONObject()
-                .put("status", status)
-                .put("mensagem", message);
+                .put("status", String.valueOf(status));
     }
 }
