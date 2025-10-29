@@ -26,15 +26,15 @@ public class UserController {
         // Validação (conforme requisitos)
         String validationError = ValidationService.validateCredentials(username, password);
         if (validationError != null) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(422, validationError); // 422 Unprocessable Entity
+            // ATUALIZAÇÃO: Protocolo define 405 para campos inválidos (regex, tamanho)
+            return createErrorResponse(405, "Erro: Campos inválidos, verifique o tipo e quantidade de caracteres");
         }
 
         try {
             // Verifica se o usuário já existe
             if (db.findUserByUsername(username) != null) {
-                // ATUALIZAÇÃO: Envia a mensagem de erro específica
-                return createErrorResponse(409, "Nome de usuário já está em uso."); // 409 Conflict
+                // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+                return createErrorResponse(409, "Erro: Recurso ja existe");
             }
 
             // Cria o hash da senha
@@ -43,12 +43,14 @@ public class UserController {
             // Salva no DB (role "user" por padrão)
             db.createUser(username, passwordHash, "user");
 
-            // ALTERAÇÃO: Envia o status como String
-            return new JSONObject().put("status", "201"); // 201 Created
+            // ATUALIZAÇÃO: Adiciona "mensagem" de sucesso conforme protocolo
+            return new JSONObject()
+                    .put("status", "201")
+                    .put("mensagem", "Sucesso: Recurso cadastrado");
 
         } catch (SQLException e) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(500, "Erro interno de banco de dados ao criar usuário.");
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
 
@@ -65,21 +67,23 @@ public class UserController {
 
             // Valida usuário e senha
             if (user == null || !PasswordService.checkPassword(password, user.getPasswordHash())) {
-                // ATUALIZAÇÃO: Envia a mensagem de erro específica
-                return createErrorResponse(401, "Usuário ou senha inválidos."); // 401 Unauthorized
+                // ATUALIZAÇÃO: Protocolo de Requisições NÃO permite 401 aqui.
+                // O erro 403 (sem permissão) é o mais próximo da lista de erros permitidos (400, 403, 422, 500).
+                return createErrorResponse(403, "Erro: sem permissão");
             }
 
             // Gera o token JWT
             String token = jwt.generateToken(user.getId(), user.getUsername(), user.getRole());
 
-            // ALTERAÇÃO: Envia o status como String
+            // ATUALIZAÇÃO: Adiciona "mensagem" de sucesso conforme protocolo
             return new JSONObject()
                     .put("status", "200")
-                    .put("token", token); // Conforme protocolo "Login"
+                    .put("mensagem", "Sucesso: operação realizada com sucesso")
+                    .put("token", token);
 
         } catch (SQLException e) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(500, "Erro interno de banco de dados durante o login.");
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
 
@@ -92,15 +96,15 @@ public class UserController {
             Claims claims = jwt.validateAndGetClaims(token);
             String username = claims.getSubject();
 
-            // O cliente espera uma string "usuario" (conforme DashboardPanel.java)
-            // ALTERAÇÃO: Envia o status como String
+            // ATUALIZAÇÃO: Adiciona "mensagem" de sucesso conforme protocolo
             return new JSONObject()
                     .put("status", "200")
+                    .put("mensagem", "Sucesso: operação realizada com sucesso")
                     .put("usuario", username); // Conforme protocolo "Listar Usuário"
 
         } catch (JwtException e) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(401, "Token inválido ou expirado.");
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(401, "Erro: Token inválido");
         }
     }
 
@@ -118,22 +122,24 @@ public class UserController {
             // Validação (conforme requisitos)
             String validationError = ValidationService.validateCredentials("valido", newPassword); // (username n/a)
             if (validationError != null) {
-                // ATUALIZAÇÃO: Envia a mensagem de erro específica
-                return createErrorResponse(422, validationError);
+                // ATUALIZAÇÃO: Protocolo define 405 para campos inválidos (regex, tamanho)
+                return createErrorResponse(405, "Erro: Campos inválidos, verifique o tipo e quantidade de caracteres");
             }
 
             String newPasswordHash = PasswordService.hashPassword(newPassword);
             db.updateUserPassword(userId, newPasswordHash);
 
-            // ALTERAÇÃO: Envia o status como String
-            return new JSONObject().put("status", "200");
+            // ATUALIZAÇÃO: Adiciona "mensagem" de sucesso conforme protocolo
+            return new JSONObject()
+                    .put("status", "200")
+                    .put("mensagem", "Sucesso: operação realizada com sucesso");
 
         } catch (JwtException e) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(401, "Token inválido ou expirado.");
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(401, "Erro: Token inválido");
         } catch (SQLException e) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(500, "Erro interno de banco de dados ao atualizar senha.");
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
 
@@ -150,15 +156,17 @@ public class UserController {
 
             db.deleteUser(userId);
 
-            // ALTERAÇÃO: Envia o status como String
-            return new JSONObject().put("status", "200");
+            // ATUALIZAÇÃO: Adiciona "mensagem" de sucesso conforme protocolo
+            return new JSONObject()
+                    .put("status", "200")
+                    .put("mensagem", "Sucesso: operação realizada com sucesso");
 
         } catch (JwtException e) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(401, "Token inválido ou expirado.");
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(401, "Erro: Token inválido");
         } catch (SQLException e) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(500, "Erro interno de banco de dados ao excluir conta.");
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
 
@@ -171,12 +179,15 @@ public class UserController {
             // Apenas validamos o token. O JWT é "stateless",
             // o cliente que deve destruir o token.
             jwt.validateAndGetClaims(token);
-            // ALTERAÇÃO: Envia o status como String
-            return new JSONObject().put("status", "200");
+
+            // ATUALIZAÇÃO: Adiciona "mensagem" de sucesso conforme protocolo
+            return new JSONObject()
+                    .put("status", "200")
+                    .put("mensagem", "Sucesso: Operação realizada com sucesso");
+
         } catch (JwtException e) {
-            // Mesmo se o token for inválido, o logout "funciona"
-            // ALTERAÇÃO: Envia o status como String
-            return new JSONObject().put("status", "200");
+            // ATUALIZAÇÃO: Protocolo EXIGE 401 para token inválido no logout
+            return createErrorResponse(401, "Erro: Token inválido");
         }
     }
 

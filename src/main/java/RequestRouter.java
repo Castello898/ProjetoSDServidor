@@ -41,17 +41,17 @@ public class RequestRouter {
                 // TODO: Adicionar casos para CRUD de Filmes e Reviews (ADMIN e USER)
 
                 default:
-                    // ATUALIZAÇÃO: Envia a mensagem de erro específica
-                    return createErrorResponse(400, "Operação desconhecida: " + operacao);
+                    // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+                    return createErrorResponse(400, "Erro: Operação não encontrada ou inválida");
             }
 
         } catch (JSONException e) {
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(400, "Requisição JSON mal formatada ou operação faltando.");
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo (Chave "operacao" faltando, etc)
+            return createErrorResponse(422, "Erro: Chaves faltantes ou invalidas");
         } catch (Exception e) {
             e.printStackTrace();
-            // ATUALIZAÇÃO: Envia a mensagem de erro específica
-            return createErrorResponse(500, "Erro interno inesperado no servidor: " + e.getMessage());
+            // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
 
