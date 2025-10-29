@@ -104,7 +104,7 @@ public class DatabaseService {
         String sql = "DELETE FROM users WHERE id = ?";
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(2, userId);
+            pstmt.setInt(1, userId);
             pstmt.executeUpdate();
         }
     }
