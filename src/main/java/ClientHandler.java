@@ -10,47 +10,53 @@ public class ClientHandler implements Runnable {
 
     private final Socket clientSocket;
     private final RequestRouter requestRouter;
-    private PrintWriter out;
-    private BufferedReader in;
+    private final ServerGui gui; // <-- NOVO
+    private final String clientId; // <-- NOVO
 
-    public ClientHandler(Socket socket) {
+    // ALTERAÇÃO: Construtor modificado
+    public ClientHandler(Socket socket, ServerGui gui) {
         this.clientSocket = socket;
-        // Cada handler tem seu próprio router, que por sua vez cria os serviços
+        this.gui = gui; // Armazena a referência da GUI
+        this.clientId = clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort();
         this.requestRouter = new RequestRouter();
     }
 
     @Override
     public void run() {
-        // Usa try-with-resources para garantir que o socket e os streams sejam fechados [cite: 82]
-        try (
-                PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true, StandardCharsets.UTF_8);
-                BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8))
-        ) {
-            this.out = out;
-            this.in = in;
-            String jsonRequest;
+        // A Lógica de I/O
+        try {
+            // NOVO: Informa a GUI que este cliente está ativo
+            gui.addActiveClient(this.clientId);
 
-            // Loop de leitura: continua lendo enquanto o cliente enviar dados
-            while ((jsonRequest = in.readLine()) != null) {
-                System.out.println("[CLIENTE->SERVIDOR] Recebido: " + jsonRequest);
+            // O try-with-resources gerencia o fechamento dos streams
+            try (PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true, StandardCharsets.UTF_8);
+                 BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8))
+            ) {
+                String jsonRequest;
 
-                // Processa a requisição
-                JSONObject jsonResponse = requestRouter.handleRequest(jsonRequest);
+                while ((jsonRequest = in.readLine()) != null) {
+                    // O System.out.println agora vai para a GUI
+                    System.out.println("[" + clientId + " -> SVR] " + jsonRequest);
 
-                // Envia a resposta de volta ao cliente
-                String responseString = jsonResponse.toString();
-                System.out.println("[SERVIDOR->CLIENTE] Enviando: " + responseString);
-                out.println(responseString);
+                    JSONObject jsonResponse = requestRouter.handleRequest(jsonRequest);
 
-                // Se a operação foi LOGOUT ou EXCLUIR_PROPRIO_USUARIO, o cliente espera
-                // que a conexão seja encerrada (conforme NetworkService.java e requisitos [cite: 92])
-                if (isCloseConnectionRequest(jsonRequest)) {
-                    break; // Sai do loop, o try-with-resources fechará o socket
+                    String responseString = jsonResponse.toString();
+                    System.out.println("[SVR -> " + clientId + "] " + responseString);
+                    out.println(responseString);
+
+                    if (isCloseConnectionRequest(jsonRequest)) {
+                        break;
+                    }
                 }
             }
         } catch (IOException e) {
-            System.err.println("Cliente desconectado (ou erro de I/O): " + e.getMessage());
+            if (!clientSocket.isClosed()) {
+                System.err.println("Erro de I/O com " + clientId + ": " + e.getMessage());
+            }
         } finally {
+            // NOVO: Informa a GUI que este cliente desconectou
+            gui.removeActiveClient(this.clientId);
+
             try {
                 if (clientSocket != null && !clientSocket.isClosed()) {
                     clientSocket.close();
@@ -58,7 +64,7 @@ public class ClientHandler implements Runnable {
             } catch (IOException e) {
                 System.err.println("Erro ao fechar socket: " + e.getMessage());
             }
-            System.out.println("Conexão com " + clientSocket.getInetAddress() + " encerrada.");
+            System.out.println("Conexão com " + clientId + " encerrada.");
         }
     }
 

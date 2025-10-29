@@ -41,20 +41,33 @@ public class RequestRouter {
                 // TODO: Adicionar casos para CRUD de Filmes e Reviews (ADMIN e USER)
 
                 default:
-                    return createErrorResponse(400);
+                    // ATUALIZAÇÃO: Envia a mensagem de erro específica
+                    return createErrorResponse(400, "Operação desconhecida: " + operacao);
             }
 
         } catch (JSONException e) {
-            return createErrorResponse(400);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(400, "Requisição JSON mal formatada ou operação faltando.");
         } catch (Exception e) {
             e.printStackTrace();
-            return createErrorResponse(500);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(500, "Erro interno inesperado no servidor: " + e.getMessage());
         }
     }
 
-    // ALTERAÇÃO: Converte o status para String
-    private JSONObject createErrorResponse(int status) {
-        return new JSONObject()
+    // ATUALIZAÇÃO: Adiciona uma sobrecarga para createErrorResponse que aceita uma mensagem
+    private JSONObject createErrorResponse(int status, String message) {
+        JSONObject response = new JSONObject()
                 .put("status", String.valueOf(status));
+        if (message != null) {
+            // O cliente já está programado para ler a chave "mensagem"
+            response.put("mensagem", message);
+        }
+        return response;
+    }
+
+    // Mantém o método antigo para erros genéricos (que chama o novo com mensagem nula)
+    private JSONObject createErrorResponse(int status) {
+        return createErrorResponse(status, null);
     }
 }

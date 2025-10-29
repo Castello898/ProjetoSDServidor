@@ -26,13 +26,15 @@ public class UserController {
         // Validação (conforme requisitos)
         String validationError = ValidationService.validateCredentials(username, password);
         if (validationError != null) {
-            return createErrorResponse(422); // 422 Unprocessable Entity
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(422, validationError); // 422 Unprocessable Entity
         }
 
         try {
             // Verifica se o usuário já existe
             if (db.findUserByUsername(username) != null) {
-                return createErrorResponse(409); // 409 Conflict
+                // ATUALIZAÇÃO: Envia a mensagem de erro específica
+                return createErrorResponse(409, "Nome de usuário já está em uso."); // 409 Conflict
             }
 
             // Cria o hash da senha
@@ -45,7 +47,8 @@ public class UserController {
             return new JSONObject().put("status", "201"); // 201 Created
 
         } catch (SQLException e) {
-            return createErrorResponse(500);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(500, "Erro interno de banco de dados ao criar usuário.");
         }
     }
 
@@ -62,7 +65,8 @@ public class UserController {
 
             // Valida usuário e senha
             if (user == null || !PasswordService.checkPassword(password, user.getPasswordHash())) {
-                return createErrorResponse(401); // 401 Unauthorized
+                // ATUALIZAÇÃO: Envia a mensagem de erro específica
+                return createErrorResponse(401, "Usuário ou senha inválidos."); // 401 Unauthorized
             }
 
             // Gera o token JWT
@@ -74,7 +78,8 @@ public class UserController {
                     .put("token", token); // Conforme protocolo "Login"
 
         } catch (SQLException e) {
-            return createErrorResponse(500);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(500, "Erro interno de banco de dados durante o login.");
         }
     }
 
@@ -94,7 +99,8 @@ public class UserController {
                     .put("usuario", username); // Conforme protocolo "Listar Usuário"
 
         } catch (JwtException e) {
-            return createErrorResponse(401);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(401, "Token inválido ou expirado.");
         }
     }
 
@@ -112,7 +118,8 @@ public class UserController {
             // Validação (conforme requisitos)
             String validationError = ValidationService.validateCredentials("valido", newPassword); // (username n/a)
             if (validationError != null) {
-                return createErrorResponse(422);
+                // ATUALIZAÇÃO: Envia a mensagem de erro específica
+                return createErrorResponse(422, validationError);
             }
 
             String newPasswordHash = PasswordService.hashPassword(newPassword);
@@ -122,9 +129,11 @@ public class UserController {
             return new JSONObject().put("status", "200");
 
         } catch (JwtException e) {
-            return createErrorResponse(401);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(401, "Token inválido ou expirado.");
         } catch (SQLException e) {
-            return createErrorResponse(500);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(500, "Erro interno de banco de dados ao atualizar senha.");
         }
     }
 
@@ -145,9 +154,11 @@ public class UserController {
             return new JSONObject().put("status", "200");
 
         } catch (JwtException e) {
-            return createErrorResponse(401);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(401, "Token inválido ou expirado.");
         } catch (SQLException e) {
-            return createErrorResponse(500);
+            // ATUALIZAÇÃO: Envia a mensagem de erro específica
+            return createErrorResponse(500, "Erro interno de banco de dados ao excluir conta.");
         }
     }
 
@@ -169,9 +180,19 @@ public class UserController {
         }
     }
 
-    // ALTERAÇÃO: Converte o status para String
-    private JSONObject createErrorResponse(int status) {
-        return new JSONObject()
+    // ATUALIZAÇÃO: Adiciona uma sobrecarga para createErrorResponse que aceita uma mensagem
+    private JSONObject createErrorResponse(int status, String message) {
+        JSONObject response = new JSONObject()
                 .put("status", String.valueOf(status));
+        if (message != null) {
+            // O cliente já está programado para ler a chave "mensagem"
+            response.put("mensagem", message);
+        }
+        return response;
+    }
+
+    // Mantém o método antigo para erros genéricos (que chama o novo com mensagem nula)
+    private JSONObject createErrorResponse(int status) {
+        return createErrorResponse(status, null);
     }
 }

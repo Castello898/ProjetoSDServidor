@@ -4,6 +4,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList; // Importado
+import java.util.List;      // Importado
 
 public class DatabaseService {
 
@@ -11,6 +13,7 @@ public class DatabaseService {
     private static final String DB_USER = "sa";
     private static final String DB_PASSWORD = "";
 
+    // --- CORREÇÃO: O CÓDIGO DO SINGLETON ESTAVA FALTANDO ---
     private static DatabaseService instance;
 
     // Singleton pattern
@@ -20,6 +23,7 @@ public class DatabaseService {
         }
         return instance;
     }
+    // --- FIM DA CORREÇÃO ---
 
     private Connection getConnection() throws SQLException {
         return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
@@ -28,7 +32,7 @@ public class DatabaseService {
     public void initializeDatabase() throws SQLException {
         String sqlCreateTable = "CREATE TABLE IF NOT EXISTS users (" +
                 "id INT AUTO_INCREMENT PRIMARY KEY," +
-                "username VARCHAR(20) UNIQUE NOT NULL," + // [cite: 77]
+                "username VARCHAR(20) UNIQUE NOT NULL," + //
                 "password_hash VARCHAR(256) NOT NULL," +
                 "role VARCHAR(10) NOT NULL" +
                 ");";
@@ -38,7 +42,7 @@ public class DatabaseService {
             stmt.execute(sqlCreateTable);
         }
 
-        // Garante que o usuário admin exista (conforme requisitos )
+        // Garante que o usuário admin exista (conforme requisitos)
         try {
             String adminPassHash = PasswordService.hashPassword("admin");
             // "MERGE" é um "INSERT se não existir"
@@ -100,8 +104,33 @@ public class DatabaseService {
         String sql = "DELETE FROM users WHERE id = ?";
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, userId);
+            pstmt.setInt(2, userId);
             pstmt.executeUpdate();
         }
+    }
+
+    /**
+     * NOVO MÉTODO: Busca todos os usuários para exibição na JTable da GUI.
+     * Não inclui o hash da senha por segurança.
+     */
+    public Object[][] getAllUsersForTable() throws SQLException {
+        List<Object[]> rows = new ArrayList<>();
+        // Não seleciona o password_hash
+        String sql = "SELECT id, username, role FROM users ORDER BY id";
+
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                rows.add(new Object[] {
+                        rs.getInt("id"),
+                        rs.getString("username"),
+                        rs.getString("role")
+                });
+            }
+        }
+        // Converte a Lista para um array 2D de Objetos
+        return rows.toArray(new Object[0][]);
     }
 }
