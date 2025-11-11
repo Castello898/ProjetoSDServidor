@@ -1,6 +1,9 @@
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import org.json.JSONObject;
+import org.json.JSONArray;
+import java.util.List;
+
 
 import java.sql.SQLException;
 
@@ -12,6 +15,14 @@ public class UserController {
     public UserController() {
         this.db = DatabaseService.getInstance();
         this.jwt = new JwtService();
+    }
+
+    private Claims validateAdmin(String token) throws JwtException, SecurityException {
+        Claims claims = jwt.validateAndGetClaims(token);
+        if (!"admin".equals(claims.get("role", String.class))) {
+            throw new SecurityException("Acesso negado: Requer privilégios de ADM");
+        }
+        return claims;
     }
 
     /**
@@ -152,20 +163,108 @@ public class UserController {
             Claims claims = jwt.validateAndGetClaims(token);
             int userId = claims.get("id", Integer.class);
 
-            // TODO: Antes de apagar o usuário, apagar as REVIEWS dele
-
+            // CORREÇÃO: Apagar reviews antes de apagar o usuário
+            db.deleteReviewsByUserId(userId);
             db.deleteUser(userId);
 
-            // ATUALIZAÇÃO: Adiciona "mensagem" de sucesso conforme protocolo
             return new JSONObject()
                     .put("status", "200")
-                    .put("mensagem", "Sucesso: operação realizada com sucesso");
-
+                    .put("mensagem", "Sucesso: operação realizada com sucesso"); // [cite: 304]
         } catch (JwtException e) {
             // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
             return createErrorResponse(401, "Erro: Token inválido");
         } catch (SQLException e) {
             // ATUALIZAÇÃO: Mensagem de erro padrão do protocolo
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
+        }
+    }
+
+    /**
+     * Operação: LISTAR_USUARIOS (Nome do Protocolo) [cite: 290]
+     */
+    public JSONObject listAllUsers(String token) {
+        try {
+            validateAdmin(token);
+            List<User> users = db.getAllUsers();
+            JSONArray userList = new JSONArray();
+
+            for (User user : users) {
+                // CONVERSÃO: int -> String (JSON)
+                // Protocolo define "nome" [cite: 306]
+                userList.put(new JSONObject()
+                        .put("id", String.valueOf(user.getId())) // [cite: 306]
+                        .put("nome", user.getUsername()) // [cite: 306]
+                );
+            }
+            return new JSONObject()
+                    .put("status", "200")
+                    .put("mensagem", "Sucesso: operação realizada com sucesso")
+                    .put("usuarios", userList); // [cite: 290]
+
+        } catch (SecurityException e) {
+            return createErrorResponse(403, "Erro: sem permissão"); // [cite: 291]
+        } catch (JwtException e) {
+            return createErrorResponse(401, "Erro: Token inválido");
+        } catch (SQLException e) {
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
+        }
+    }
+
+    /**
+     * Operação: ADMIN_EDITAR_USUARIO (Nome do Protocolo) [cite: 297]
+     */
+    public JSONObject updateOtherUserPassword(String token, JSONObject request) {
+        try {
+            validateAdmin(token);
+
+            // CORREÇÃO: O 'id' está fora do objeto 'usuario' no protocolo [cite: 297]
+            // CONVERSÃO: String (JSON) -> int (DB)
+            int userIdToUpdate = Integer.parseInt(request.getString("id"));
+
+            String newPassword = request.getJSONObject("usuario").getString("senha"); // [cite: 297]
+
+            // ... (validação da senha)
+            String newPasswordHash = PasswordService.hashPassword(newPassword);
+            db.updateUserPassword(userIdToUpdate, newPasswordHash);
+
+            return createErrorResponse(200, "Sucesso: operação realizada com sucesso");
+        } catch (SecurityException e) {
+            return createErrorResponse(403, "Erro: sem permissão"); // [cite: 298]
+        } catch (NumberFormatException e) {
+            return createErrorResponse(400, "Erro: ID inválido"); // [cite: 307]
+        } catch (JwtException e) {
+            return createErrorResponse(401, "Erro: Token inválido");
+        } catch (SQLException e) {
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
+        }
+    }
+
+    /**
+     * Operação: ADMIN_EXCLUIR_USUARIO (Nome do Protocolo) [cite: 302]
+     */
+    public JSONObject deleteOtherUser(String token, JSONObject request) {
+        try {
+            validateAdmin(token);
+
+            // CORREÇÃO: O 'id' está fora do objeto 'usuario' no protocolo [cite: 302]
+            // CONVERSÃO: String (JSON) -> int (DB)
+            int userIdToDelete = Integer.parseInt(request.getString("id"));
+
+            // (Lógica para não excluir 'admin')
+            User user = db.findUserById(userIdToDelete); // (Você precisará criar 'findUserById' no DBService)
+            if (user != null && "admin".equals(user.getRole())) {
+                return createErrorResponse(403, "Erro: O usuário 'admin' não pode ser excluído.");
+            }
+
+            db.deleteReviewsByUserId(userIdToDelete);
+            db.deleteUser(userIdToDelete);
+
+            return createErrorResponse(200, "Sucesso: operação realizada com sucesso");
+        } catch (SecurityException e) {
+            return createErrorResponse(403, "Erro: sem permissão"); // [cite: 303]
+        } catch (JwtException e) {
+            return createErrorResponse(401, "Erro: Token inválido");
+        } catch (SQLException e) {
             return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
