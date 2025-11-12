@@ -44,9 +44,13 @@ public class ClientHandler implements Runnable {
                     System.out.println("[SVR -> " + clientId + "] " + responseString);
                     out.println(responseString);
 
-                    if (isCloseConnectionRequest(jsonRequest)) {
-                        break;
+                    // --- MUDANÇA PRINCIPAL AQUI ---
+                    // Agora passamos a RESPOSTA para o método de verificação
+                    if (isSuccessfulCloseRequest(jsonRequest, jsonResponse)) {
+                        System.out.println("Cliente " + clientId + " solicitou encerramento (Logout/Delete) e obteve sucesso. Fechando conexão.");
+                        break; // Encerra o loop e fecha o socket
                     }
+                    // --- FIM DA MUDANÇA ---
                 }
             }
         } catch (IOException e) {
@@ -68,11 +72,30 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    private boolean isCloseConnectionRequest(String jsonRequest) {
+    /**
+     * MÉTODO ATUALIZADO:
+     * Verifica se a requisição é de encerramento (Logout/Delete) E
+     * se a resposta do servidor foi de SUCESSO (status 2xx).
+     *
+     * @param jsonRequest  A string da requisição original
+     * @param jsonResponse O JSON da resposta que foi enviada
+     * @return true se a conexão deve ser fechada, false caso contrário
+     */
+    private boolean isSuccessfulCloseRequest(String jsonRequest, JSONObject jsonResponse) {
         try {
+            // 1. Verifica a RESPOSTA:
+            // Se o status NÃO for de sucesso (ex: "403", "500"), não feche a conexão.
+            String status = jsonResponse.optString("status", "500");
+            if (!status.startsWith("2")) {
+                return false; // Se foi um erro (como o 403 do admin), mantenha a conexão
+            }
+
+            // 2. Se a resposta FOI um sucesso, verifique a REQUISIÇÃO:
+            // Apenas feche se foi uma operação de Logout ou Exclusão
             JSONObject req = new JSONObject(jsonRequest);
             String operacao = req.optString("operacao");
             return operacao.equals("LOGOUT") || operacao.equals("EXCLUIR_PROPRIO_USUARIO");
+
         } catch (Exception e) {
             return false;
         }

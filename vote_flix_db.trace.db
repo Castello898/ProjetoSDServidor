@@ -16,3 +16,6 @@ org.h2.jdbc.JdbcSQLDataException: Invalid value "2" for parameter "parameterInde
 2025-10-29 09:20:15.416239-03:00 jdbc[3]: exception
 org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "REVIEWS" not found; SQL statement:
 DELETE FROM reviews WHERE id_usuario = ? [42102-224]
+2025-11-12 11:15:10.424758-03:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Value too long for column "SINOPSE CHARACTER VARYING(250)": "U&'Criaturas monstruosas conhecidas como Kaiju come\\00e7am a emergir do mar. Par... (437)"; SQL statement:
+INSERT INTO filmes (titulo, diretor, ano, generos, sinopse) VALUES (?, ?, ?, ?, ?) [22001-224]
