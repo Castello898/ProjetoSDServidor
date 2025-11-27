@@ -30,17 +30,28 @@ public class MovieController {
         try {
             validateAdmin(token);
             JSONObject movieData = request.getJSONObject("filme");
-            String generos = movieData.getJSONArray("genero").join(",");
 
-            // (O createMovie do DB já aceita strings)
-            db.createMovie(
-                    movieData.getString("titulo"),
-                    movieData.getString("diretor"),
-                    movieData.getString("ano"),
-                    generos,
-                    movieData.getString("sinopse")
-            );
-            return createSuccessResponse(201, "Sucesso: Recurso cadastrado"); // [cite: 276]
+            // Extrai dados para validação
+            String titulo = movieData.optString("titulo");
+            String diretor = movieData.optString("diretor");
+            String ano = movieData.optString("ano");
+            String sinopse = movieData.optString("sinopse");
+            JSONArray generosArray = movieData.optJSONArray("genero");
+
+            // 1. VALIDAÇÃO DOS DADOS
+            String error = ValidationService.validateMovie(titulo, diretor, ano, sinopse, generosArray);
+            if (error != null) {
+                // Retorna erro 405 (Campos inválidos) conforme padrão usado no UserController
+                return createErrorResponse(405, "Erro: " + error);
+            }
+
+            // 2. FORMATAÇÃO DOS GÊNEROS (Apenas nomes separados por vírgula)
+            String generosFormatados = formatGenres(generosArray);
+
+            db.createMovie(titulo, diretor, ano, generosFormatados, sinopse);
+
+            return createSuccessResponse(201, "Sucesso: Recurso cadastrado");
+
         } catch (SecurityException e) {
             return createErrorResponse(403, "Erro: Sem permissão");
         } catch (JwtException e) {
@@ -55,19 +66,28 @@ public class MovieController {
             validateAdmin(token);
             JSONObject movieData = request.getJSONObject("filme");
 
-            // CONVERSÃO: String (JSON) -> int (DB)
-            int id = Integer.parseInt(movieData.getString("id")); // [cite: 306]
-            String generos = movieData.getJSONArray("genero").join(",");
+            int id = Integer.parseInt(movieData.getString("id"));
 
-            db.updateMovie(
-                    id,
-                    movieData.getString("titulo"),
-                    movieData.getString("diretor"),
-                    movieData.getString("ano"),
-                    generos,
-                    movieData.getString("sinopse")
-            );
-            return createSuccessResponse(200, "Sucesso: operação realizada com sucesso"); // [cite: 293]
+            // Extrai dados para validação
+            String titulo = movieData.optString("titulo");
+            String diretor = movieData.optString("diretor");
+            String ano = movieData.optString("ano");
+            String sinopse = movieData.optString("sinopse");
+            JSONArray generosArray = movieData.optJSONArray("genero");
+
+            // 1. VALIDAÇÃO DOS DADOS
+            String error = ValidationService.validateMovie(titulo, diretor, ano, sinopse, generosArray);
+            if (error != null) {
+                return createErrorResponse(405, "Erro: " + error);
+            }
+
+            // 2. FORMATAÇÃO DOS GÊNEROS
+            String generosFormatados = formatGenres(generosArray);
+
+            db.updateMovie(id, titulo, diretor, ano, generosFormatados, sinopse);
+
+            return createSuccessResponse(200, "Sucesso: operação realizada com sucesso");
+
         } catch (SecurityException e) {
             return createErrorResponse(403, "Erro: Sem permissão");
         } catch (JwtException e) {
@@ -75,6 +95,17 @@ public class MovieController {
         } catch (SQLException e) {
             return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
+    }
+
+    // Método auxiliar para formatar "Ação,Comédia" sem aspas extras
+    private String formatGenres(JSONArray generosArray) {
+        if (generosArray == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < generosArray.length(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append(generosArray.getString(i));
+        }
+        return sb.toString();
     }
 
     public JSONObject deleteMovie(String token, JSONObject request) {
