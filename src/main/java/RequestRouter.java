@@ -1,17 +1,16 @@
 import org.json.JSONException;
 import org.json.JSONObject;
 
-/**
- * Roteia uma requisição JSON para o controlador apropriado.
- */
 public class RequestRouter {
 
     private final UserController userController;
     private final MovieController movieController;
+    private final ReviewController reviewController; // NOVO
 
     public RequestRouter() {
         this.userController = new UserController();
         this.movieController = new MovieController();
+        this.reviewController = new ReviewController(); // NOVO
     }
 
     public JSONObject handleRequest(String jsonRequestString) {
@@ -21,69 +20,65 @@ public class RequestRouter {
             String token = request.optString("token", null);
 
             switch (operacao) {
-                // --- Operações Públicas ---
-                case "LOGIN": // [cite: 274]
+                // --- Operações Públicas/User ---
+                case "LOGIN":
                     return userController.login(request);
-                case "CRIAR_USUARIO": // [cite: 279]
+                case "CRIAR_USUARIO":
                     return userController.register(request);
 
-                // --- Operações de Usuário (Comum) ---
-                case "LISTAR_PROPRIO_USUARIO": // [cite: 291]
+                // --- Operações de Conta ---
+                case "LISTAR_PROPRIO_USUARIO":
                     return userController.viewProfile(token);
-                case "EDITAR_PROPRIO_USUARIO": // [cite: 299]
+                case "EDITAR_PROPRIO_USUARIO":
                     return userController.updatePassword(token, request);
-                case "EXCLUIR_PROPRIO_USUARIO": // [cite: 304]
+                case "EXCLUIR_PROPRIO_USUARIO":
                     return userController.deleteAccount(token);
-                case "LOGOUT": // [cite: 274]
+                case "LOGOUT":
                     return userController.logout(token);
 
-                // --- Operações de Usuário (ADM) ---
-                case "LISTAR_USUARIOS": // [cite: 290]
+                // --- Operações ADM User ---
+                case "LISTAR_USUARIOS":
                     return userController.listAllUsers(token);
-                case "ADMIN_EDITAR_USUARIO": // [cite: 297]
+                case "ADMIN_EDITAR_USUARIO":
                     return userController.updateOtherUserPassword(token, request);
-                case "ADMIN_EXCLUIR_USUARIO": // [cite: 302]
+                case "ADMIN_EXCLUIR_USUARIO":
                     return userController.deleteOtherUser(token, request);
 
-                // --- Operações de Filmes (ADM) ---
-                case "CRIAR_FILME": // [cite: 275]
+                // --- Filmes ---
+                case "CRIAR_FILME":
                     return movieController.createMovie(token, request);
-                case "EDITAR_FILME": // [cite: 293]
+                case "EDITAR_FILME":
                     return movieController.updateMovie(token, request);
-                case "EXCLUIR_FILME": // [cite: 300]
+                case "EXCLUIR_FILME":
                     return movieController.deleteMovie(token, request);
-
-                // --- Operações de Filmes (Todos) ---
-                case "LISTAR_FILMES": // [cite: 281]
+                case "LISTAR_FILMES":
                     return movieController.listAllMovies(token);
 
-                // TODO: Adicionar casos para CRUD de Reviews [cite: 278, 295, 301]
+                // --- REVIEWS (NOVO) ---
+                case "CRIAR_REVIEW":
+                    return reviewController.createReview(token, request);
+                case "LISTAR_REVIEWS":
+                    return reviewController.listReviews(token, request);
+                case "EDITAR_REVIEW":
+                    return reviewController.updateReview(token, request);
+                case "EXCLUIR_REVIEW":
+                    return reviewController.deleteReview(token, request);
 
                 default:
                     return createErrorResponse(400, "Erro: Operação não encontrada ou inválida");
             }
 
         } catch (JSONException e) {
-            return createErrorResponse(422, "Erro: Chaves faltantes ou invalidas"); // [cite: 308]
+            return createErrorResponse(422, "Erro: Chaves faltantes ou invalidas");
         } catch (Exception e) {
             e.printStackTrace();
-            return createErrorResponse(500, "Erro: Falha interna do servidor"); // [cite: 307]
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
 
-    // ATUALIZAÇÃO: Adiciona uma sobrecarga para createErrorResponse que aceita uma mensagem
     private JSONObject createErrorResponse(int status, String message) {
-        JSONObject response = new JSONObject()
-                .put("status", String.valueOf(status));
-        if (message != null) {
-            // O cliente já está programado para ler a chave "mensagem"
-            response.put("mensagem", message);
-        }
+        JSONObject response = new JSONObject().put("status", String.valueOf(status));
+        if (message != null) response.put("mensagem", message);
         return response;
-    }
-
-    // Mantém o método antigo para erros genéricos (que chama o novo com mensagem nula)
-    private JSONObject createErrorResponse(int status) {
-        return createErrorResponse(status, null);
     }
 }

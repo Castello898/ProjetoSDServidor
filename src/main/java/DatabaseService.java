@@ -57,13 +57,14 @@ public class DatabaseService {
                 "id INT AUTO_INCREMENT PRIMARY KEY," +
                 "id_filme INT NOT NULL," +
                 "id_usuario INT NOT NULL," +
-                "nome_usuario VARCHAR(20) NOT NULL," +
-                "nota INT NOT NULL," + // NUMÉRICO para cálculo da média [cite: 535]
-                "titulo VARCHAR(250)," + // O Protocolo (Schemas) [cite: 306] mostra um título
+                "nome_usuario VARCHAR(20) NOT NULL," + // Cache do nome para facilitar listagem
+                "nota INT NOT NULL," +
+                "titulo VARCHAR(50)," +
                 "descricao VARCHAR(250)," +
+                "data VARCHAR(10)," + // Formato dd/MM/yyyy
                 "FOREIGN KEY (id_filme) REFERENCES filmes(id) ON DELETE CASCADE," +
                 "FOREIGN KEY (id_usuario) REFERENCES users(id) ON DELETE CASCADE," +
-                "CONSTRAINT uc_review UNIQUE(id_filme, id_usuario)" +
+                "CONSTRAINT uc_review UNIQUE(id_filme, id_usuario)" + // Garante 1 review por usuário por filme
                 ");";
 
         try (Connection conn = getConnection();
@@ -217,93 +218,241 @@ public class DatabaseService {
 
     public void createMovie(String titulo, String diretor, String ano, String generos, String sinopse) throws SQLException {
         String sql = "INSERT INTO filmes (titulo, diretor, ano, generos, sinopse) VALUES (?, ?, ?, ?, ?)";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, titulo);
-            pstmt.setString(2, diretor);
-            pstmt.setString(3, ano);
-            pstmt.setString(4, generos);
-            pstmt.setString(5, sinopse);
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, titulo); pstmt.setString(2, diretor); pstmt.setString(3, ano); pstmt.setString(4, generos); pstmt.setString(5, sinopse);
             pstmt.executeUpdate();
         }
-    }
-
-    public List<JSONObject> getAllMovies() throws SQLException {
-        List<JSONObject> filmes = new ArrayList<>();
-        String sql = "SELECT id, titulo, diretor, ano, generos, sinopse, nota_media, qtd_avaliacoes FROM filmes ORDER BY titulo";
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            while (rs.next()) {
-                JSONObject filme = new JSONObject();
-                // Converte os dados do DB para o formato JSON esperado (todas strings)
-                filme.put("id", String.valueOf(rs.getInt("id")));
-                filme.put("titulo", rs.getString("titulo"));
-                filme.put("diretor", rs.getString("diretor"));
-                filme.put("ano", rs.getString("ano"));
-                // Converte a string "A,B,C" para um array JSON ["A", "B", "C"]
-                filme.put("genero", new org.json.JSONArray(rs.getString("generos").split(",")));
-                filme.put("sinopse", rs.getString("sinopse"));
-                filme.put("nota", String.format("%.1f", rs.getDouble("nota_media")));
-                filme.put("qtd_avaliacoes", String.valueOf(rs.getInt("qtd_avaliacoes")));
-                filmes.add(filme);
-            }
-        }
-        return filmes;
     }
 
     public void updateMovie(int id, String titulo, String diretor, String ano, String generos, String sinopse) throws SQLException {
         String sql = "UPDATE filmes SET titulo = ?, diretor = ?, ano = ?, generos = ?, sinopse = ? WHERE id = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, titulo);
-            pstmt.setString(2, diretor);
-            pstmt.setString(3, ano);
-            pstmt.setString(4, generos);
-            pstmt.setString(5, sinopse);
-            pstmt.setInt(6, id);
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, titulo); pstmt.setString(2, diretor); pstmt.setString(3, ano); pstmt.setString(4, generos); pstmt.setString(5, sinopse); pstmt.setInt(6, id);
             pstmt.executeUpdate();
         }
     }
 
-    // Método de deleteMovie (recebe int)
     public void deleteMovie(int id) throws SQLException {
         String sql = "DELETE FROM filmes WHERE id = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, id);
-            pstmt.executeUpdate();
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, id); pstmt.executeUpdate();
         }
     }
 
     public List<JSONObject> getAllMoviesAsJson() throws SQLException {
         List<JSONObject> filmes = new ArrayList<>();
         String sql = "SELECT * FROM filmes ORDER BY titulo";
-
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 JSONObject filme = new JSONObject();
-                // CONVERSÃO PARA STRING (Protocolo)
                 filme.put("id", String.valueOf(rs.getInt("id")));
                 filme.put("titulo", rs.getString("titulo"));
                 filme.put("diretor", rs.getString("diretor"));
                 filme.put("ano", rs.getString("ano"));
                 filme.put("genero", new JSONArray(rs.getString("generos").split(",")));
                 filme.put("sinopse", rs.getString("sinopse"));
-                // CONVERSÃO NUMÉRICO -> STRING FORMATADA
-                filme.put("nota", String.format("%.1f", rs.getDouble("nota_media")));
+                filme.put("nota", String.format("%.1f", rs.getDouble("nota_media")).replace(',', '.')); // Garante ponto
                 filme.put("qtd_avaliacoes", String.valueOf(rs.getInt("qtd_avaliacoes")));
-
                 filmes.add(filme);
             }
         }
         return filmes;
     }
 
+    public void createReview(int idFilme, int idUsuario, String nomeUsuario, int nota, String titulo, String descricao, String data) throws SQLException {
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            conn.setAutoCommit(false); // Inicia transação
 
+            // 1. Insere a Review
+            String sqlInsert = "INSERT INTO reviews (id_filme, id_usuario, nome_usuario, nota, titulo, descricao, data) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlInsert)) {
+                pstmt.setInt(1, idFilme);
+                pstmt.setInt(2, idUsuario);
+                pstmt.setString(3, nomeUsuario);
+                pstmt.setInt(4, nota);
+                pstmt.setString(5, titulo);
+                pstmt.setString(6, descricao);
+                pstmt.setString(7, data);
+                pstmt.executeUpdate();
+            }
+
+            // 2. Recalcula média e quantidade no filme
+            recalculateMovieRating(conn, idFilme);
+
+            conn.commit(); // Confirma transação
+        } catch (SQLException e) {
+            if (conn != null) conn.rollback();
+            throw e;
+        } finally {
+            if (conn != null) {
+                conn.setAutoCommit(true);
+                conn.close();
+            }
+        }
+    }
+
+    public void updateReview(int idReview, int nota, String titulo, String descricao, String data) throws SQLException {
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            conn.setAutoCommit(false);
+
+            // 0. Descobre qual é o filme dessa review para recalcular depois
+            int idFilme = -1;
+            String sqlFind = "SELECT id_filme FROM reviews WHERE id = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlFind)) {
+                pstmt.setInt(1, idReview);
+                try(ResultSet rs = pstmt.executeQuery()) {
+                    if(rs.next()) idFilme = rs.getInt("id_filme");
+                }
+            }
+
+            if (idFilme == -1) throw new SQLException("Review não encontrada.");
+
+            // 1. Atualiza a Review
+            String sqlUpdate = "UPDATE reviews SET nota = ?, titulo = ?, descricao = ?, data = ? WHERE id = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
+                pstmt.setInt(1, nota);
+                pstmt.setString(2, titulo);
+                pstmt.setString(3, descricao);
+                pstmt.setString(4, data);
+                pstmt.setInt(5, idReview);
+                pstmt.executeUpdate();
+            }
+
+            // 2. Recalcula média
+            recalculateMovieRating(conn, idFilme);
+
+            conn.commit();
+        } catch (SQLException e) {
+            if (conn != null) conn.rollback();
+            throw e;
+        } finally {
+            if (conn != null) {
+                conn.setAutoCommit(true);
+                conn.close();
+            }
+        }
+    }
+
+    public void deleteReview(int idReview) throws SQLException {
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            conn.setAutoCommit(false);
+
+            int idFilme = -1;
+            String sqlFind = "SELECT id_filme FROM reviews WHERE id = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlFind)) {
+                pstmt.setInt(1, idReview);
+                try(ResultSet rs = pstmt.executeQuery()) {
+                    if(rs.next()) idFilme = rs.getInt("id_filme");
+                }
+            }
+
+            if (idFilme == -1) throw new SQLException("Review não encontrada.");
+
+            // 1. Deleta
+            String sqlDelete = "DELETE FROM reviews WHERE id = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlDelete)) {
+                pstmt.setInt(1, idReview);
+                pstmt.executeUpdate();
+            }
+
+            // 2. Recalcula
+            recalculateMovieRating(conn, idFilme);
+
+            conn.commit();
+        } catch (SQLException e) {
+            if (conn != null) conn.rollback();
+            throw e;
+        } finally {
+            if (conn != null) {
+                conn.setAutoCommit(true);
+                conn.close();
+            }
+        }
+    }
+
+    public List<JSONObject> getReviewsByMovieId(int idFilme) throws SQLException {
+        List<JSONObject> reviews = new ArrayList<>();
+        String sql = "SELECT * FROM reviews WHERE id_filme = ? ORDER BY id DESC"; // Mais recentes primeiro
+
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, idFilme);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    JSONObject review = new JSONObject();
+                    review.put("id", String.valueOf(rs.getInt("id")));
+                    review.put("id_filme", String.valueOf(rs.getInt("id_filme")));
+                    review.put("nome_usuario", rs.getString("nome_usuario"));
+                    review.put("nota", String.valueOf(rs.getInt("nota")));
+                    review.put("titulo", rs.getString("titulo"));
+                    review.put("descricao", rs.getString("descricao"));
+                    review.put("data", rs.getString("data"));
+
+                    // Verifica se é o usuário atual (pode ser tratado no controller ou front,
+                    // mas o DB retorna os dados crus)
+                    reviews.add(review);
+                }
+            }
+        }
+        return reviews;
+    }
+
+    public Review findReviewById(int reviewId) throws SQLException {
+        String sql = "SELECT * FROM reviews WHERE id = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, reviewId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return new Review(
+                            rs.getInt("id"),
+                            rs.getInt("id_filme"),
+                            rs.getInt("id_usuario"),
+                            rs.getInt("nota")
+                    );
+                }
+            }
+        }
+        return null;
+    }
+
+    // --- MÉTODO AUXILIAR PRIVADO ---
+    private void recalculateMovieRating(Connection conn, int idFilme) throws SQLException {
+        String sqlCalc = "SELECT COUNT(*) as qtd, AVG(CAST(nota AS FLOAT)) as media FROM reviews WHERE id_filme = ?";
+        int qtd = 0;
+        double media = 0.0;
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sqlCalc)) {
+            pstmt.setInt(1, idFilme);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    qtd = rs.getInt("qtd");
+                    media = rs.getDouble("media");
+                }
+            }
+        }
+        // Se a quantidade for 0, media é 0
+        if (qtd == 0) media = 0.0;
+
+        String sqlUpdate = "UPDATE filmes SET nota_media = ?, qtd_avaliacoes = ? WHERE id = ?";
+        try (PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
+            pstmt.setDouble(1, media);
+            pstmt.setInt(2, qtd);
+            pstmt.setInt(3, idFilme);
+            pstmt.executeUpdate();
+        }
+    }
+
+    // Classe interna auxiliar simples se não houver arquivo separado
+    public static class Review {
+        public int id, idFilme, idUsuario, nota;
+        public Review(int id, int f, int u, int n) { this.id=id; this.idFilme=f; this.idUsuario=u; this.nota=n; }
+    }
 
 }
