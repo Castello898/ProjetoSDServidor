@@ -1,4 +1,3 @@
-// Novo arquivo: MovieController.java
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import org.json.JSONArray;
@@ -16,7 +15,6 @@ public class MovieController {
         this.jwt = new JwtService();
     }
 
-    // Valida o token e verifica se é ADM
     private Claims validateAdmin(String token) throws JwtException, SecurityException {
         Claims claims = jwt.validateAndGetClaims(token);
         if (!"admin".equals(claims.get("role", String.class))) {
@@ -25,38 +23,79 @@ public class MovieController {
         return claims;
     }
 
-    // Operação: CRIAR_FILME (ADM) [cite: 190]
+    // LISTAR_FILMES [cite: 9]
+    public JSONObject listAllMovies(String token) {
+        try {
+            jwt.validateAndGetClaims(token);
+            List<JSONObject> filmes = db.getAllMoviesAsJson();
+            return new JSONObject()
+                    .put("status", "200")
+                    .put("mensagem", "Sucesso: Operação realizada com sucesso")
+                    .put("filmes", new JSONArray(filmes));
+        } catch (JwtException e) {
+            return createErrorResponse(401, "Erro: Token inválido");
+        } catch (SQLException e) {
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
+        }
+    }
+
+    // BUSCAR_FILME_ID [cite: 14]
+    public JSONObject getMovieById(String token, JSONObject request) {
+        try {
+            jwt.validateAndGetClaims(token);
+
+            // Verifica o nome exato da chave no protocolo (id_filme)
+            String idStr = request.optString("id_filme");
+            if (idStr == null || idStr.isEmpty()) {
+                return createErrorResponse(400, "Erro: Operação não encontrada ou inválida"); // Ou Bad Request
+            }
+
+            int id = Integer.parseInt(idStr);
+
+            JSONObject filme = db.findMovieByIdAsJson(id);
+            if (filme == null) {
+                return createErrorResponse(404, "Erro: Recurso inexistente"); // [cite: 17]
+            }
+
+            List<JSONObject> reviews = db.getReviewsByMovieId(id);
+
+            return new JSONObject()
+                    .put("status", "200")
+                    .put("mensagem", "Sucesso: operação realizada com sucesso")
+                    .put("filme", filme)
+                    .put("reviews", new JSONArray(reviews)); // [cite: 15]
+
+        } catch (JwtException e) {
+            return createErrorResponse(401, "Erro: Token inválido");
+        } catch (NumberFormatException e) {
+            return createErrorResponse(400, "Erro: Operação não encontrada ou inválida");
+        } catch (SQLException e) {
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
+        }
+    }
+
     public JSONObject createMovie(String token, JSONObject request) {
         try {
             validateAdmin(token);
             JSONObject movieData = request.getJSONObject("filme");
-
-            // Extrai dados para validação
             String titulo = movieData.optString("titulo");
             String diretor = movieData.optString("diretor");
             String ano = movieData.optString("ano");
             String sinopse = movieData.optString("sinopse");
             JSONArray generosArray = movieData.optJSONArray("genero");
 
-            // 1. VALIDAÇÃO DOS DADOS
             String error = ValidationService.validateMovie(titulo, diretor, ano, sinopse, generosArray);
-            if (error != null) {
-                // Retorna erro 405 (Campos inválidos) conforme padrão usado no UserController
-                return createErrorResponse(405, "Erro: " + error);
-            }
+            if (error != null) return createErrorResponse(405, "Erro: Campos inválidos, verifique o tipo e quantidade de caracteres"); // [cite: 4]
 
-            // 2. FORMATAÇÃO DOS GÊNEROS (Apenas nomes separados por vírgula)
-            String generosFormatados = formatGenres(generosArray);
-
-            db.createMovie(titulo, diretor, ano, generosFormatados, sinopse);
-
+            db.createMovie(titulo, diretor, ano, formatGenres(generosArray), sinopse);
             return createSuccessResponse(201, "Sucesso: Recurso cadastrado");
-
         } catch (SecurityException e) {
-            return createErrorResponse(403, "Erro: Sem permissão");
+            return createErrorResponse(403, "Erro: sem permissão");
+        } catch (org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException e) {
+            return createErrorResponse(409, "Erro: Recurso ja existe"); // [cite: 4]
         } catch (JwtException e) {
             return createErrorResponse(401, "Erro: Token inválido");
-        } catch (SQLException e) {
+        } catch (Exception e) {
             return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
@@ -65,39 +104,46 @@ public class MovieController {
         try {
             validateAdmin(token);
             JSONObject movieData = request.getJSONObject("filme");
-
             int id = Integer.parseInt(movieData.getString("id"));
-
-            // Extrai dados para validação
             String titulo = movieData.optString("titulo");
             String diretor = movieData.optString("diretor");
             String ano = movieData.optString("ano");
             String sinopse = movieData.optString("sinopse");
             JSONArray generosArray = movieData.optJSONArray("genero");
 
-            // 1. VALIDAÇÃO DOS DADOS
             String error = ValidationService.validateMovie(titulo, diretor, ano, sinopse, generosArray);
-            if (error != null) {
-                return createErrorResponse(405, "Erro: " + error);
-            }
+            if (error != null) return createErrorResponse(405, "Erro: Campos inválidos, verifique o tipo e quantidade de caracteres");
 
-            // 2. FORMATAÇÃO DOS GÊNEROS
-            String generosFormatados = formatGenres(generosArray);
+            if (db.findMovieByIdAsJson(id) == null) return createErrorResponse(404, "Erro: Recurso inexistente");
 
-            db.updateMovie(id, titulo, diretor, ano, generosFormatados, sinopse);
-
+            db.updateMovie(id, titulo, diretor, ano, formatGenres(generosArray), sinopse);
             return createSuccessResponse(200, "Sucesso: operação realizada com sucesso");
-
         } catch (SecurityException e) {
-            return createErrorResponse(403, "Erro: Sem permissão");
+            return createErrorResponse(403, "Erro: sem permissão");
         } catch (JwtException e) {
             return createErrorResponse(401, "Erro: Token inválido");
-        } catch (SQLException e) {
+        } catch (Exception e) {
             return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
 
-    // Método auxiliar para formatar "Ação,Comédia" sem aspas extras
+    public JSONObject deleteMovie(String token, JSONObject request) {
+        try {
+            validateAdmin(token);
+            int id = Integer.parseInt(request.getString("id"));
+            if (db.findMovieByIdAsJson(id) == null) return createErrorResponse(404, "Erro: Recurso inexistente");
+
+            db.deleteMovie(id);
+            return createSuccessResponse(200, "Sucesso: operação realizada com sucesso");
+        } catch (SecurityException e) {
+            return createErrorResponse(403, "Erro: sem permissão");
+        } catch (JwtException e) {
+            return createErrorResponse(401, "Erro: Token inválido");
+        } catch (Exception e) {
+            return createErrorResponse(500, "Erro: Falha interna do servidor");
+        }
+    }
+
     private String formatGenres(JSONArray generosArray) {
         if (generosArray == null) return "";
         StringBuilder sb = new StringBuilder();
@@ -108,47 +154,6 @@ public class MovieController {
         return sb.toString();
     }
 
-    public JSONObject deleteMovie(String token, JSONObject request) {
-        try {
-            validateAdmin(token);
-
-            // CORREÇÃO: O 'id' está fora do objeto 'filme' no protocolo [cite: 300]
-            // CONVERSÃO: String (JSON) -> int (DB)
-            int id = Integer.parseInt(request.getString("id"));
-
-            db.deleteMovie(id);
-            return createSuccessResponse(200, "Sucesso: operação realizada com sucesso"); // [cite: 300]
-        } catch (SecurityException e) {
-            return createErrorResponse(403, "Erro: sem permissão"); // [cite: 301]
-        } catch (JwtException e) {
-            return createErrorResponse(401, "Erro: Token inválido"); // [cite: 300]
-        } catch (NumberFormatException e) {
-            return createErrorResponse(400, "Erro: ID inválido"); // [cite: 307]
-        } catch (SQLException e) {
-            return createErrorResponse(500, "Erro: Falha interna do servidor"); // [cite: 301]
-        }
-    }
-
-    // Operação: LISTAR_FILMES
-    public JSONObject listAllMovies(String token) {
-        try {
-            jwt.validateAndGetClaims(token);
-
-            // Este método já retorna a lista formatada com strings
-            List<JSONObject> filmes = db.getAllMoviesAsJson();
-
-            return new JSONObject()
-                    .put("status", "200")
-                    .put("mensagem", "Sucesso: operação realizada com sucesso")
-                    .put("filmes", new JSONArray(filmes)); // [cite: 281]
-        } catch (JwtException e) {
-            return createErrorResponse(401, "Erro: Token inválido"); // [cite: 283]
-        } catch (SQLException e) {
-            return createErrorResponse(500, "Erro: Falha interna do servidor"); // [cite: 284]
-        }
-    }
-
-    // Métodos utilitários de resposta
     private JSONObject createErrorResponse(int status, String message) {
         return new JSONObject().put("status", String.valueOf(status)).put("mensagem", message);
     }
