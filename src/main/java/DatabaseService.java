@@ -48,7 +48,6 @@ public class DatabaseService {
                 "CONSTRAINT uc_filme UNIQUE(titulo, diretor, ano)" +
                 ");";
 
-        // ATUALIZAÇÃO: Adicionado campo 'editado'
         String sqlCreateTableReviews = "CREATE TABLE IF NOT EXISTS reviews (" +
                 "id INT AUTO_INCREMENT PRIMARY KEY," +
                 "id_filme INT NOT NULL," +
