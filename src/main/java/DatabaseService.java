@@ -11,7 +11,7 @@ import org.json.JSONObject;
 
 public class DatabaseService {
 
-    private static final String DB_URL = "jdbc:h2:./vote_flix_db;AUTO_SERVER=TRUE";
+    private static final String DB_URL = "jdbc:h2:./vote_flix_db;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1";
     private static final String DB_USER = "sa";
     private static final String DB_PASSWORD = "";
 
