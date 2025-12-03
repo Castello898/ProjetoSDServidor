@@ -7,10 +7,16 @@ public class RequestRouter {
     private final MovieController movieController;
     private final ReviewController reviewController;
 
-    public RequestRouter() {
-        this.userController = new UserController();
+    // Construtor agora recebe ServerGui
+    public RequestRouter(ServerGui gui) {
+        this.userController = new UserController(gui); // Passa a GUI para o UserController
         this.movieController = new MovieController();
         this.reviewController = new ReviewController();
+    }
+
+    // Sobrecarga para manter compatibilidade caso seja instanciado sem GUI (testes), embora não usado aqui
+    public RequestRouter() {
+        this(null);
     }
 
     public JSONObject handleRequest(String jsonRequestString) {
@@ -40,11 +46,11 @@ public class RequestRouter {
                 case "EDITAR_FILME": return movieController.updateMovie(token, request);
                 case "EXCLUIR_FILME": return movieController.deleteMovie(token, request);
                 case "LISTAR_FILMES": return movieController.listAllMovies(token);
-                case "BUSCAR_FILME_ID": return movieController.getMovieById(token, request); // [NOVO]
+                case "BUSCAR_FILME_ID": return movieController.getMovieById(token, request);
 
                 // Reviews
                 case "CRIAR_REVIEW": return reviewController.createReview(token, request);
-                case "LISTAR_REVIEWS_USUARIO": return reviewController.listUserReviews(token); // [NOVO]
+                case "LISTAR_REVIEWS_USUARIO": return reviewController.listUserReviews(token);
                 case "EDITAR_REVIEW": return reviewController.updateReview(token, request);
                 case "EXCLUIR_REVIEW": return reviewController.deleteReview(token, request);
 
@@ -53,7 +59,7 @@ public class RequestRouter {
             }
 
         } catch (JSONException e) {
-            return createErrorResponse(422, "Erro: Chaves faltantes ou invalidas"); // [cite: 1]
+            return createErrorResponse(422, "Erro: Chaves faltantes ou invalidas");
         } catch (Exception e) {
             e.printStackTrace();
             return createErrorResponse(500, "Erro: Falha interna do servidor");

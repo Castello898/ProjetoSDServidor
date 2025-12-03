@@ -7,9 +7,10 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.SQLException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
 
 public class ServerGui extends JFrame {
 
@@ -27,6 +28,9 @@ public class ServerGui extends JFrame {
     private ExecutorService pool;
     private ServerSocket serverSocket;
     private Thread serverThread;
+
+    // --- NOVO: Mapa para rastrear UserID -> ClientHandler ---
+    private final Map<Integer, ClientHandler> onlineUsers = new ConcurrentHashMap<>();
 
     public ServerGui() {
         setTitle("VoteFlix® Server - Control Panel");
@@ -160,6 +164,8 @@ public class ServerGui extends JFrame {
             pool.shutdownNow(); // Força o desligamento de todos os handlers
             pool = Executors.newCachedThreadPool(); // Cria um novo pool para o próximo start
 
+            onlineUsers.clear(); // Limpa mapa de usuários
+
             System.out.println("Servidor parado.");
             portField.setEditable(true);
             startButton.setText("Start Server");
@@ -187,6 +193,25 @@ public class ServerGui extends JFrame {
 
     public void removeActiveClient(String clientId) {
         SwingUtilities.invokeLater(() -> activeClientsModel.removeElement(clientId));
+    }
+
+    // --- NOVOS MÉTODOS DE CONTROLE DE SESSÃO ---
+
+    public void registerUser(int userId, ClientHandler client) {
+        onlineUsers.put(userId, client);
+        System.out.println("[SESSION] User ID " + userId + " logado e registrado.");
+    }
+
+    public void unregisterUser(int userId) {
+        onlineUsers.remove(userId);
+    }
+
+    public void disconnectUser(int userId) {
+        ClientHandler client = onlineUsers.remove(userId);
+        if (client != null) {
+            System.out.println("[ADMIN] Forçando desconexão do User ID " + userId);
+            client.forceClose(); // Derruba o socket
+        }
     }
 
     // Ponto de entrada

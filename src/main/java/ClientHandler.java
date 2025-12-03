@@ -10,32 +10,42 @@ public class ClientHandler implements Runnable {
 
     private final Socket clientSocket;
     private final RequestRouter requestRouter;
-    private final ServerGui gui; // <-- NOVO
-    private final String clientId; // <-- NOVO
+    private final ServerGui gui;
+    private final String clientId;
 
-    // ALTERAÇÃO: Construtor modificado
+    // NOVO: Guarda o ID do usuário logado neste socket
+    private Integer loggedUserId = null;
+
     public ClientHandler(Socket socket, ServerGui gui) {
         this.clientSocket = socket;
-        this.gui = gui; // Armazena a referência da GUI
+        this.gui = gui;
         this.clientId = clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort();
-        this.requestRouter = new RequestRouter();
+        // Passa a GUI para o Router (que passará para o Controller)
+        this.requestRouter = new RequestRouter(gui);
+    }
+
+    // NOVO: Método chamado pela GUI para derrubar conexão
+    public void forceClose() {
+        try {
+            if (!clientSocket.isClosed()) {
+                clientSocket.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
     public void run() {
-        // A Lógica de I/O
         try {
-            // NOVO: Informa a GUI que este cliente está ativo
             gui.addActiveClient(this.clientId);
 
-            // O try-with-resources gerencia o fechamento dos streams
             try (PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true, StandardCharsets.UTF_8);
                  BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8))
             ) {
                 String jsonRequest;
 
                 while ((jsonRequest = in.readLine()) != null) {
-                    // O System.out.println agora vai para a GUI
                     System.out.println("[" + clientId + " -> SVR] " + jsonRequest);
 
                     JSONObject jsonResponse = requestRouter.handleRequest(jsonRequest);
@@ -44,21 +54,35 @@ public class ClientHandler implements Runnable {
                     System.out.println("[SVR -> " + clientId + "] " + responseString);
                     out.println(responseString);
 
-                    // --- MUDANÇA PRINCIPAL AQUI ---
-                    // Agora passamos a RESPOSTA para o método de verificação
-                    if (isSuccessfulCloseRequest(jsonRequest, jsonResponse)) {
-                        System.out.println("Cliente " + clientId + " solicitou encerramento (Logout/Delete) e obteve sucesso. Fechando conexão.");
-                        break; // Encerra o loop e fecha o socket
+                    // --- NOVO: Lógica de Registro de Sessão ---
+                    if (loggedUserId == null && isLoginSuccess(jsonRequest, jsonResponse)) {
+                        try {
+                            String token = jsonResponse.getString("token");
+                            // Usa JwtService apenas para extrair o ID
+                            int id = new JwtService().validateAndGetClaims(token).get("id", Integer.class);
+                            this.loggedUserId = id;
+                            gui.registerUser(id, this); // Registra na GUI
+                        } catch (Exception e) {
+                            System.err.println("Erro ao registrar sessão: " + e.getMessage());
+                        }
                     }
-                    // --- FIM DA MUDANÇA ---
+
+                    if (isSuccessfulCloseRequest(jsonRequest, jsonResponse)) {
+                        System.out.println("Cliente " + clientId + " saiu voluntariamente.");
+                        break;
+                    }
                 }
             }
         } catch (IOException e) {
             if (!clientSocket.isClosed()) {
-                System.err.println("Erro de I/O com " + clientId + ": " + e.getMessage());
+                System.err.println("Erro de I/O (ou Kick) com " + clientId + ": " + e.getMessage());
             }
         } finally {
-            // NOVO: Informa a GUI que este cliente desconectou
+            // NOVO: Remove do mapa de usuários online
+            if (loggedUserId != null) {
+                gui.unregisterUser(loggedUserId);
+            }
+
             gui.removeActiveClient(this.clientId);
 
             try {
@@ -72,26 +96,20 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    /**
-     * MÉTODO ATUALIZADO:
-     * Verifica se a requisição é de encerramento (Logout/Delete) E
-     * se a resposta do servidor foi de SUCESSO (status 2xx).
-     *
-     * @param jsonRequest  A string da requisição original
-     * @param jsonResponse O JSON da resposta que foi enviada
-     * @return true se a conexão deve ser fechada, false caso contrário
-     */
+    private boolean isLoginSuccess(String jsonRequest, JSONObject jsonResponse) {
+        try {
+            JSONObject req = new JSONObject(jsonRequest);
+            String op = req.optString("operacao");
+            String status = jsonResponse.optString("status");
+            return "LOGIN".equals(op) && "200".equals(status);
+        } catch (Exception e) { return false; }
+    }
+
     private boolean isSuccessfulCloseRequest(String jsonRequest, JSONObject jsonResponse) {
         try {
-            // 1. Verifica a RESPOSTA:
-            // Se o status NÃO for de sucesso (ex: "403", "500"), não feche a conexão.
             String status = jsonResponse.optString("status", "500");
-            if (!status.startsWith("2")) {
-                return false; // Se foi um erro (como o 403 do admin), mantenha a conexão
-            }
+            if (!status.startsWith("2")) return false;
 
-            // 2. Se a resposta FOI um sucesso, verifique a REQUISIÇÃO:
-            // Apenas feche se foi uma operação de Logout ou Exclusão
             JSONObject req = new JSONObject(jsonRequest);
             String operacao = req.optString("operacao");
             return operacao.equals("LOGOUT") || operacao.equals("EXCLUIR_PROPRIO_USUARIO");

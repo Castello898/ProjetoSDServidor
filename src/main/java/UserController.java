@@ -9,10 +9,18 @@ public class UserController {
 
     private final DatabaseService db;
     private final JwtService jwt;
+    private final ServerGui gui; // NOVO
 
-    public UserController() {
+    // Construtor principal
+    public UserController(ServerGui gui) {
         this.db = DatabaseService.getInstance();
         this.jwt = new JwtService();
+        this.gui = gui;
+    }
+
+    // Construtor sem GUI (fallback)
+    public UserController() {
+        this(null);
     }
 
     private Claims validateAdmin(String token) throws JwtException, SecurityException {
@@ -23,9 +31,6 @@ public class UserController {
         return claims;
     }
 
-    /**
-     * Operação: CRIAR_USUARIO
-     */
     public JSONObject register(JSONObject request) {
         JSONObject userData = request.getJSONObject("usuario");
         String username = userData.getString("nome");
@@ -48,18 +53,13 @@ public class UserController {
             String passwordHash = PasswordService.hashPassword(password);
             db.createUser(username, passwordHash, "user");
 
-            return new JSONObject()
-                    .put("status", "201")
-                    .put("mensagem", "Sucesso: Recurso cadastrado");
+            return new JSONObject().put("status", "201").put("mensagem", "Sucesso: Recurso cadastrado");
 
         } catch (SQLException e) {
             return createErrorResponse(500, "Erro: Falha interna do servidor");
         }
     }
 
-    /**
-     * Operação: LOGIN
-     */
     public JSONObject login(JSONObject request) {
         String username = request.getString("usuario");
         String password = request.getString("senha");
@@ -83,9 +83,6 @@ public class UserController {
         }
     }
 
-    /**
-     * Operação: LISTAR_PROPRIO_USUARIO
-     */
     public JSONObject viewProfile(String token) {
         try {
             Claims claims = jwt.validateAndGetClaims(token);
@@ -101,21 +98,16 @@ public class UserController {
         }
     }
 
-    /**
-     * Operação: EDITAR_PROPRIO_USUARIO
-     */
     public JSONObject updatePassword(String token, JSONObject request) {
         try {
             Claims claims = jwt.validateAndGetClaims(token);
 
-            // Restrição: Admin não pode alterar a própria senha por aqui
             String role = claims.get("role", String.class);
             if ("admin".equals(role)) {
                 return createErrorResponse(403, "Erro: O usuário 'admin' não pode alterar a própria senha.");
             }
 
             int userId = claims.get("id", Integer.class);
-
             String newPassword = request.getJSONObject("usuario").getString("senha");
 
             String validationError = ValidationService.validateCredentials("valido", newPassword);
@@ -126,9 +118,7 @@ public class UserController {
             String newPasswordHash = PasswordService.hashPassword(newPassword);
             db.updateUserPassword(userId, newPasswordHash);
 
-            return new JSONObject()
-                    .put("status", "200")
-                    .put("mensagem", "Sucesso: operação realizada com sucesso");
+            return new JSONObject().put("status", "200").put("mensagem", "Sucesso: operação realizada com sucesso");
 
         } catch (JwtException e) {
             return createErrorResponse(401, "Erro: Token inválido");
@@ -137,9 +127,6 @@ public class UserController {
         }
     }
 
-    /**
-     * Operação: EXCLUIR_PROPRIO_USUARIO
-     */
     public JSONObject deleteAccount(String token) {
         try {
             Claims claims = jwt.validateAndGetClaims(token);
@@ -151,13 +138,10 @@ public class UserController {
 
             int userId = claims.get("id", Integer.class);
 
-            // Chama o método corrigido do DBService para apagar reviews E recalcular média
             db.deleteReviewsByUserId(userId);
             db.deleteUser(userId);
 
-            return new JSONObject()
-                    .put("status", "200")
-                    .put("mensagem", "Sucesso: operação realizada com sucesso");
+            return new JSONObject().put("status", "200").put("mensagem", "Sucesso: operação realizada com sucesso");
         } catch (JwtException e) {
             return createErrorResponse(401, "Erro: Token inválido");
         } catch (SQLException e) {
@@ -165,9 +149,6 @@ public class UserController {
         }
     }
 
-    /**
-     * Operação: LISTAR_USUARIOS
-     */
     public JSONObject listAllUsers(String token) {
         try {
             validateAdmin(token);
@@ -194,9 +175,6 @@ public class UserController {
         }
     }
 
-    /**
-     * Operação: ADMIN_EDITAR_USUARIO
-     */
     public JSONObject updateOtherUserPassword(String token, JSONObject request) {
         try {
             validateAdmin(token);
@@ -233,9 +211,14 @@ public class UserController {
                 return createErrorResponse(403, "Erro: O usuário 'admin' não pode ser excluído.");
             }
 
-            // Chama o método corrigido do DBService para apagar reviews E recalcular média
             db.deleteReviewsByUserId(userIdToDelete);
             db.deleteUser(userIdToDelete);
+
+            // --- NOVO: Kick no usuário se ele estiver online ---
+            if (gui != null) {
+                gui.disconnectUser(userIdToDelete);
+            }
+            // ---------------------------------------------------
 
             return createErrorResponse(200, "Sucesso: operação realizada com sucesso");
         } catch (SecurityException e) {
@@ -247,15 +230,10 @@ public class UserController {
         }
     }
 
-    /**
-     * Operação: LOGOUT
-     */
     public JSONObject logout(String token) {
         try {
             jwt.validateAndGetClaims(token);
-            return new JSONObject()
-                    .put("status", "200")
-                    .put("mensagem", "Sucesso: Operação realizada com sucesso");
+            return new JSONObject().put("status", "200").put("mensagem", "Sucesso: Operação realizada com sucesso");
 
         } catch (JwtException e) {
             return createErrorResponse(401, "Erro: Token inválido");
