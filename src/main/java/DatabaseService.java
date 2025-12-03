@@ -57,7 +57,7 @@ public class DatabaseService {
                 "titulo VARCHAR(50)," +
                 "descricao VARCHAR(250)," +
                 "data VARCHAR(10)," +
-                "editado BOOLEAN DEFAULT FALSE," + // [NOVO] Requerido pelo protocolo
+                "editado BOOLEAN DEFAULT FALSE," +
                 "FOREIGN KEY (id_filme) REFERENCES filmes(id) ON DELETE CASCADE," +
                 "FOREIGN KEY (id_usuario) REFERENCES users(id) ON DELETE CASCADE," +
                 "CONSTRAINT uc_review UNIQUE(id_filme, id_usuario)" +
@@ -68,6 +68,15 @@ public class DatabaseService {
             stmt.execute(sqlCreateTableUsers);
             stmt.execute(sqlCreateTableFilmes);
             stmt.execute(sqlCreateTableReviews);
+
+            // --- CORREÇÃO: Atualização de Schema ---
+            // Adiciona a coluna 'editado' se ela não existir (para bancos antigos)
+            try {
+                stmt.execute("ALTER TABLE reviews ADD COLUMN IF NOT EXISTS editado BOOLEAN DEFAULT FALSE");
+            } catch (SQLException e) {
+                // Ignora erro caso a coluna não possa ser adicionada (embora o IF NOT EXISTS resolva)
+                System.out.println("Nota: Verificação de coluna 'editado' concluída.");
+            }
         }
         createAdminUser();
     }
@@ -102,7 +111,6 @@ public class DatabaseService {
         }
     }
 
-    // Método auxiliar para converter ResultSet de filme em JSON
     private JSONObject resultSetToMovieJson(ResultSet rs) throws SQLException {
         JSONObject filme = new JSONObject();
         filme.put("id", String.valueOf(rs.getInt("id")));
@@ -143,7 +151,6 @@ public class DatabaseService {
         return filmes;
     }
 
-    // Métodos updateMovie e deleteMovie mantidos do anterior...
     public void updateMovie(int id, String titulo, String diretor, String ano, String generos, String sinopse) throws SQLException {
         String sql = "UPDATE filmes SET titulo = ?, diretor = ?, ano = ?, generos = ?, sinopse = ? WHERE id = ?";
         try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -166,7 +173,6 @@ public class DatabaseService {
             conn = getConnection();
             conn.setAutoCommit(false);
 
-            // Editado começa como FALSE
             String sqlInsert = "INSERT INTO reviews (id_filme, id_usuario, nome_usuario, nota, titulo, descricao, data, editado) VALUES (?, ?, ?, ?, ?, ?, ?, FALSE)";
             try (PreparedStatement pstmt = conn.prepareStatement(sqlInsert)) {
                 pstmt.setInt(1, idFilme);
@@ -204,7 +210,6 @@ public class DatabaseService {
             }
             if (idFilme == -1) throw new SQLException("Review não encontrada.");
 
-            // Atualiza e seta editado = TRUE
             String sqlUpdate = "UPDATE reviews SET nota = ?, titulo = ?, descricao = ?, data = ?, editado = TRUE WHERE id = ?";
             try (PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
                 pstmt.setInt(1, nota);
@@ -260,7 +265,6 @@ public class DatabaseService {
         return getReviewsList(sql, idFilme);
     }
 
-    // NOVO: Método para listar reviews de um usuário específico
     public List<JSONObject> getReviewsByUserId(int idUsuario) throws SQLException {
         String sql = "SELECT * FROM reviews WHERE id_usuario = ? ORDER BY id DESC";
         return getReviewsList(sql, idUsuario);
@@ -281,7 +285,6 @@ public class DatabaseService {
                     review.put("titulo", rs.getString("titulo"));
                     review.put("descricao", rs.getString("descricao"));
                     review.put("data", rs.getString("data"));
-                    // Adicionado 'editado' como string "true"/"false" conforme exemplo do protocolo [cite: 12]
                     review.put("editado", String.valueOf(rs.getBoolean("editado")));
                     reviews.add(review);
                 }
@@ -304,7 +307,7 @@ public class DatabaseService {
         return null;
     }
 
-    // --- MÉTODOS DE USUÁRIO (Replicados para contexto) ---
+    // --- MÉTODOS DE USUÁRIO ---
     public User findUserByUsername(String username) throws SQLException {
         String sql = "SELECT * FROM users WHERE username = ?";
         try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -372,16 +375,12 @@ public class DatabaseService {
     }
 
     public void deleteReviewsByUserId(int userId) throws SQLException {
-        // ... implementação existente (usada ao deletar usuário)
         String sql = "DELETE FROM reviews WHERE id_usuario = ?";
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, userId);
             pstmt.executeUpdate();
         }
-        // Nota: Idealmente recalcularia médias de todos os filmes afetados,
-        // mas para simplificar e seguir o fluxo de deleteUser, mantemos assim por hora
-        // ou implementamos uma lógica mais complexa se necessário.
     }
 
     private void recalculateMovieRating(Connection conn, int idFilme) throws SQLException {
