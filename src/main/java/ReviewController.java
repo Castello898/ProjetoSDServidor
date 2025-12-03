@@ -26,12 +26,15 @@ public class ReviewController {
             // Validação de Token
             Claims claims = jwt.validateAndGetClaims(token);
 
-            // --- CORREÇÃO AQUI ---
-            // ANTES (ERRADO): int userId = Integer.parseInt(claims.getId());
-            // O "getId()" pega o 'jti' (token id), mas nós salvamos como claim customizada "id".
-            int userId = claims.get("id", Integer.class);
-            // ---------------------
+            // --- ALTERAÇÃO: Restrição para Admin ---
+            // Administradores não podem criar avaliações (Regra de Negócio)
+            String role = claims.get("role", String.class);
+            if ("admin".equals(role)) {
+                return createErrorResponse(403, "Erro: Administradores não podem criar avaliações.");
+            }
+            // ---------------------------------------
 
+            int userId = claims.get("id", Integer.class);
             String username = claims.getSubject();
 
             JSONObject reviewData = request.getJSONObject("review");
@@ -79,7 +82,6 @@ public class ReviewController {
         } catch (JwtException e) {
             return createErrorResponse(401, "Erro: Token inválido");
         } catch (NumberFormatException e) {
-            // É aqui que o erro estava caindo quando claims.getId() retornava null
             return createErrorResponse(400, "Erro: Operação não encontrada ou inválida");
         } catch (Exception e) {
             e.printStackTrace();
@@ -93,10 +95,7 @@ public class ReviewController {
     public JSONObject listUserReviews(String token) {
         try {
             Claims claims = jwt.validateAndGetClaims(token);
-
-            // --- CORREÇÃO AQUI ---
             int userId = claims.get("id", Integer.class);
-            // ---------------------
 
             List<JSONObject> reviews = db.getReviewsByUserId(userId);
 
@@ -118,10 +117,7 @@ public class ReviewController {
     public JSONObject updateReview(String token, JSONObject request) {
         try {
             Claims claims = jwt.validateAndGetClaims(token);
-
-            // --- CORREÇÃO AQUI ---
             int userId = claims.get("id", Integer.class);
-            // ---------------------
 
             JSONObject reviewData = request.getJSONObject("review");
 
@@ -169,11 +165,7 @@ public class ReviewController {
     public JSONObject deleteReview(String token, JSONObject request) {
         try {
             Claims claims = jwt.validateAndGetClaims(token);
-
-            // --- CORREÇÃO AQUI ---
             int userId = claims.get("id", Integer.class);
-            // ---------------------
-
             String role = claims.get("role", String.class);
 
             if (!request.has("id")) {

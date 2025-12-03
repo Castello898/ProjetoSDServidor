@@ -69,12 +69,9 @@ public class DatabaseService {
             stmt.execute(sqlCreateTableFilmes);
             stmt.execute(sqlCreateTableReviews);
 
-            // --- CORREÇÃO: Atualização de Schema ---
-            // Adiciona a coluna 'editado' se ela não existir (para bancos antigos)
             try {
                 stmt.execute("ALTER TABLE reviews ADD COLUMN IF NOT EXISTS editado BOOLEAN DEFAULT FALSE");
             } catch (SQLException e) {
-                // Ignora erro caso a coluna não possa ser adicionada (embora o IF NOT EXISTS resolva)
                 System.out.println("Nota: Verificação de coluna 'editado' concluída.");
             }
         }
@@ -184,7 +181,7 @@ public class DatabaseService {
                 pstmt.setString(7, data);
                 pstmt.executeUpdate();
             }
-            recalculateMovieRating(conn, idFilme);
+            recalculateMovieRating(conn, idFilme); // Recalcula na criação
             conn.commit();
         } catch (SQLException e) {
             if (conn != null) conn.rollback();
@@ -219,7 +216,7 @@ public class DatabaseService {
                 pstmt.setInt(5, idReview);
                 pstmt.executeUpdate();
             }
-            recalculateMovieRating(conn, idFilme);
+            recalculateMovieRating(conn, idFilme); // Recalcula na edição
             conn.commit();
         } catch (SQLException e) {
             if (conn != null) conn.rollback();
@@ -250,7 +247,7 @@ public class DatabaseService {
                 pstmt.setInt(1, idReview);
                 pstmt.executeUpdate();
             }
-            recalculateMovieRating(conn, idFilme);
+            recalculateMovieRating(conn, idFilme); // Recalcula na exclusão
             conn.commit();
         } catch (SQLException e) {
             if (conn != null) conn.rollback();
@@ -374,14 +371,49 @@ public class DatabaseService {
         return rows.toArray(new Object[0][]);
     }
 
+    // --- CORREÇÃO AQUI: Deletar Reviews + Recalcular Médias ---
     public void deleteReviewsByUserId(int userId) throws SQLException {
-        String sql = "DELETE FROM reviews WHERE id_usuario = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, userId);
-            pstmt.executeUpdate();
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            conn.setAutoCommit(false); // Inicia transação
+
+            // 1. Recupera os IDs dos filmes que esse usuário avaliou ANTES de deletar
+            List<Integer> filmesAfetados = new ArrayList<>();
+            String sqlSelect = "SELECT id_filme FROM reviews WHERE id_usuario = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlSelect)) {
+                pstmt.setInt(1, userId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        filmesAfetados.add(rs.getInt("id_filme"));
+                    }
+                }
+            }
+
+            // 2. Deleta as reviews
+            String sqlDelete = "DELETE FROM reviews WHERE id_usuario = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlDelete)) {
+                pstmt.setInt(1, userId);
+                pstmt.executeUpdate();
+            }
+
+            // 3. Recalcula a média de cada filme afetado
+            for (int idFilme : filmesAfetados) {
+                recalculateMovieRating(conn, idFilme);
+            }
+
+            conn.commit();
+        } catch (SQLException e) {
+            if (conn != null) conn.rollback();
+            throw e;
+        } finally {
+            if (conn != null) {
+                conn.setAutoCommit(true);
+                conn.close();
+            }
         }
     }
+    // ----------------------------------------------------------
 
     private void recalculateMovieRating(Connection conn, int idFilme) throws SQLException {
         String sqlCalc = "SELECT COUNT(*) as qtd, AVG(CAST(nota AS FLOAT)) as media FROM reviews WHERE id_filme = ?";
